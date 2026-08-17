@@ -2,9 +2,9 @@ import { LightningElement, api, wire, track } from 'lwc';
 import { ShowToastEvent } from 'lightning/platformShowToastEvent';
 import USER_ID from '@salesforce/user/Id';
 import { getRecord } from 'lightning/uiRecordApi';
-import getCarrierEmails from '@salesforce/apex/SecureRateConManager.getCarrierEmails';
-import getTenderTemplate from '@salesforce/apex/SecureRateConManager.getTenderTemplate';
-import launchEmailFlow from '@salesforce/apex/SecureRateConManager.launchEmailFlow';
+import getCarrierQuote from '@salesforce/apex/SecureRateConManager.getCarrierQuote';
+import highwayRateConAPI from '@salesforce/apex/SecureRateConManager.highwayRateConAPI';
+import getValidUsers from '@salesforce/apex/SecureRateConManager.getValidUsers';
 const USER_FIELDS = ['User.Email', 'User.Name'];
 export default class RateConEmailModal extends LightningElement {
     @wire(getRecord, { recordId: USER_ID, fields: USER_FIELDS })
@@ -23,72 +23,91 @@ export default class RateConEmailModal extends LightningElement {
     isModalOpen = false;
     isLoading = true;
     recordId = null;
-    @track toEmails = 'takunp@openroad.inc';
+    @track toEmails = [];
     carrierId = null;
-    templateOptions = [];
-    selectedTemplate = '';
-    @track subject = '';
-    @track body = '';
     contentVersionId = null;
+    carrierQuoteId = null;
+    @track quoteInfo = '';
+    allUsers = [];
+    userSearch = '';
+    toShare = [];
+    dot = '';
+    isError = false;
+    highwayCarrierId = null;
+    usersColumns = [
+        { label: 'Name', fieldName: 'Name' },
+        { label: 'Email', fieldName: 'Email' }
+    ];
+    
 
-    @api openModal(recordId, contentVersionId, carrierId) {
-        console.log('RateConEmailModal openModal called with recordId:', recordId, 'contentVersionId:', contentVersionId);
+    @api openModal(recordId, contentVersionId, carrierId, carrierQuoteId, highwayCarrierId) {
+        console.log('RateConEmailModal openModal called with recordId:', recordId, 'contentVersionId:', contentVersionId, 'carrierQuoteId:', carrierQuoteId, 'highwayCarrierId:', highwayCarrierId);
         this.recordId = recordId;
         this.carrierId = carrierId;
         this.contentVersionId = contentVersionId;
+        this.carrierQuoteId = carrierQuoteId;
         this.isModalOpen = true;
-        //fetch carrier quote emails
-        getCarrierEmails({accountId: this.carrierId })
+        this.highwayCarrierId = highwayCarrierId;
+        getCarrierQuote({carrierQuoteId: this.carrierQuoteId})
             .then(result => {
-                console.log('result: ' , result);
-                const emails = Array.isArray(result)
-                    ? result.map(r => (typeof r === 'string' ? r : (r.Email || r.email))).filter(Boolean)
-                    : [];
-                // this.toEmails = emails.join(', ');
+                console.log('getCarrierQuote result:', result);
+                this.quoteInfo = result.rtms__Carrier_Service__r.Name + ' - ' 
+                + (result.rtms__Carrier_Service__r.MC__c != null ? 'MC: ' + result.rtms__Carrier_Service__r.MC__c + ' - ' : '')
+                + (result.rtms__Carrier_Service__r.UD_DOT__c != null ? 'UD DOT: ' + result.rtms__Carrier_Service__r.UD_DOT__c + ' - ' : '')
+                + new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(result.rtms__Carrier_Total__c || 0);
+                this.dot = result.rtms__Carrier_Service__r.UD_DOT__c;
+                console.log('dot value:', this.dot);
+                if (this.dot == null){
+                    const event = new ShowToastEvent({
+                        title: 'Error',
+                        message: 'dot doesnt exist for this carrier, please contact your administrator',
+                        variant: 'error',
+                        mode: 'sticky'
+                    });
+                    this.dispatchEvent(event);
+                    this.isError = true;
+                }
             })
             .catch(error => {
-                console.error('Error fetching carrier emails:', error);
+                console.error('Error fetching carrier quote:', error);
             });
-        getTenderTemplate({ recordId: this.recordId })
-        .then(result => {
-            this.templateOptions = [
-                {
-                    label: '-- Select Template --',
-                    value: '', 
-                    subject: '',
-                    templateBody: ''
-                },
-                {
-                    label: result.Name,
-                    value: result.Id, 
-                    subject: result.Subject,
-                    templateBody: result.Body
-                }
-            ];
-            const loadTenderTemplate = this.templateOptions.find(
-                t => t.label && t.label.toLowerCase().includes('load tender')
-            );
-            if (loadTenderTemplate) {
-                this.selectedTemplate = loadTenderTemplate.value;
-                this.subject = loadTenderTemplate.subject;
-                this.body = loadTenderTemplate.templateBody;
-            }
-        })
-        .catch(error => {
-            console.error('Error fetching email templates:', error);
-        });
+        getValidUsers()
+            .then(result => {
+                console.log('getValidUsers result:', result);
+                this.allUsers = Array.isArray(result) ? result : [];;
+            })
+            .catch(error => {
+                console.error('Error fetching all users:', error);
+            });
+        
         this.isLoading = false;
         
     }
 
+    get filteredUsers() {
+        const search = this.userSearch.toLowerCase();
+        return this.allUsers.filter(user => {
+            const firstName = (user.FirstName || '').toLowerCase();
+            const lastName = (user.LastName || '').toLowerCase();
+            const email = (user.Email || '').toLowerCase();
+            return (
+                (firstName && firstName.startsWith(search)) ||
+                (lastName && lastName.startsWith(search)) ||
+                (email && email.startsWith(search))
+            );
+        });
+    }
+
+    handleUserSearch(event) {
+        this.userSearch = event.target.value;
+    }
+
     sendEmail(){
-        launchEmailFlow({
+        highwayRateConAPI({
             fromWho: this.userName,
-            subject: this.subject,
-            body: this.body,
-            templatename: this.selectedTemplate,
+            subject: null,
             loadId: this.recordId,
-            userId: USER_ID,
+            highwayCarrierId: this.highwayCarrierId,
             recipients: this.toEmails,
             contentVersionId: this.contentVersionId
         })
@@ -105,6 +124,28 @@ export default class RateConEmailModal extends LightningElement {
         .catch(error => {
             console.error('Error launching email flow:', error);
         });
+    }
+
+    get userSelectedIds() {
+        const emails = (this.toEmails || []).map(e => e.trim().toLowerCase()).filter(Boolean);
+        return emails
+        .map(email => {
+            const u = this.allUsers.find(x => (x.Email || '').toLowerCase() === email);
+            return u ? u.Id : null;
+        })
+        .filter(id => !!id);
+    }
+
+    handleUserSelection(event) {
+        const selectedRows = event.detail.selectedRows;
+        console.log('Selected rows:', selectedRows);
+        this.toEmails = selectedRows.map(row => row.Email);
+        console.log('Updated toEmails:', JSON.stringify(this.toEmails));
+    }
+
+
+    get toEmailsString() {
+        return (this.toEmails || []).filter(Boolean).join(', ');
     }
 
     closeModal(){

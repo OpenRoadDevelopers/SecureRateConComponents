@@ -21,52 +21,66 @@
                     </div>
                 </template>
                 <template if:false={isLoading}>
-                    <div class="slds-modal__content slds-p-around_small email-modal-content">
-                        <div class="email-fields-section">
-                            <lightning-input 
-                                label="From" 
-                                type="email"
-                                value={userEmail} 
-                                disabled
-                                >
-                            </lightning-input>
-
-                            <lightning-input 
-                                label="To" 
-                                type="email"
-                                value={toEmails} 
-                                onchange={handleChange}
-                                >
-                            </lightning-input>
-                        
-                            <lightning-combobox 
-                                name="template"
-                                label="Email Template"
-                                value={selectedTemplate}
-                                placeholder="Select a template"
-                                options={templateOptions}
-                                onchange={handleTemplateChange}
-                                class="slds-m-bottom_small">
-                            </lightning-combobox>
-
-                            <lightning-input 
-                                label="Subject" 
-                                value={subject} 
-                                onchange={handleChange}
-                                >
-                            </lightning-input>
+                    <template if:true={isError}>
+                        <div class="slds-modal__content slds-p-around_small email-modal-content">
+                            <p class="error-message">An error occurred while fetching data. Please try again later.</p>
                         </div>
-                        <div class="message-body-section">
-                            <lightning-input-rich-text 
-                                label="Body" 
-                                value={body} 
-                                onchange={handleChange}
-                                label-visible
-                                class="message-body-input">
-                            </lightning-input-rich-text>
-                        </div>
+                    </template>
+                    <template if:false={isError}>
+                        <div class="slds-modal__content slds-p-around_small email-modal-content">
+                            <div class="email-fields-section">
 
-                    </div>
+                                <lightning-input 
+                                    label="Carrier Quote" 
+                                    type="text"
+                                    value={quoteInfo} 
+                                    disabled
+                                    >
+                                </lightning-input>
+
+                                <lightning-input 
+                                    label="From" 
+                                    type="email"
+                                    value={userEmail} 
+                                    disabled
+                                    >
+                                </lightning-input>
+
+                                <div class="to-wrapper">
+                                    <label class="to-label">To</label>
+                                    <div class="to-chips" role="list">
+                                        <template if:true={toEmails.length}>
+                                        <template for:each={toEmails} for:item="email">
+                                            <span key={email} class="email-pill" role="listitem">{email}</span>
+                                        </template>
+                                        </template>
+                                        <template if:false={toEmails.length}>
+                                        <span class="placeholder">No recipients selected</span>
+                                        </template>
+                                    </div>
+                                </div>
+
+                                <lightning-input
+                                    type="search"
+                                    label="Search Users"
+                                    value={userSearch}
+                                    onchange={handleUserSearch}>
+                                </lightning-input>
+
+                                <div class="slds-card slds-card_boundary" style="height: 300px; background-color:#f2f2f2; border-radius: 5px; overflow: auto; padding: 3px;">
+                                    <lightning-datatable
+                                        key-field="Id"
+                                        data={filteredUsers}
+                                        columns={usersColumns}
+                                        hide-table-header="true"
+                                        onrowselection={handleUserSelection}
+                                        selected-rows={userSelectedIds}
+                                    >
+                                    </lightning-datatable>
+                                </div>
+                            </div>
+                        </div>
+                    </template>
                 </template>
                 <footer class="slds-modal__footer">
                     <lightning-button 

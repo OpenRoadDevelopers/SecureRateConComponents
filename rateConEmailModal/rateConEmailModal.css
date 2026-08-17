@@ -1,0 +1,41 @@
+.to-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.to-label {
+  font-weight: 600;
+  color: #16325c;
+  font-size: 0.9rem;
+}
+
+.to-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  background: #f2f2f2;
+  padding: 8px;
+  border-radius: 8px;
+  min-height: 40px;
+  align-items: center;
+  box-sizing: border-box;
+}
+
+.email-pill {
+  background: #ffffff;
+  border: 1px solid #d8dde6;
+  padding: 6px 10px;
+  border-radius: 16px;
+  font-size: 0.85rem;
+  color: #16325c;
+  box-shadow: 0 1px 0 rgba(0,0,0,0.03);
+  white-space: nowrap;
+}
+
+.placeholder {
+  color: #6b6b6b;
+  font-style: italic;
+  font-size: 0.9rem;
+}

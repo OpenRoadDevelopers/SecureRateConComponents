@@ -1,4 +1,5 @@
 public class SecureRateConManager {
+   
     @AuraEnabled()
     public static List<rtms__CarrierQuote__c> getCarrierQuotes(Id loadId){
         System.debug('getCarrierQuotes Called');
@@ -19,8 +20,10 @@ public class SecureRateConManager {
         System.debug('setCarrier Called');
         System.debug('carrierId: ' + carrierId);
         rtms__Load__c load = [SELECT rtms__Carrier__c, rtms__Load_Status__c FROM rtms__Load__c WHERE Id =: loadId];
-        load.rtms__Carrier__c = carrierId;
-        update load;
+        if(carrierId != load.rtms__Carrier__c ){
+        	load.rtms__Carrier__c = carrierId;
+        	update load;    
+        }
         List<rtms__CarrierQuote__c> toUpdate = new List<rtms__CarrierQuote__c>();
         List<rtms__CarrierQuote__c> quotes = [SELECT rtms__Accepted__c FROM rtms__CarrierQuote__c WHERE rtms__Load__c =: loadId];
         for(rtms__CarrierQuote__c q : quotes){
@@ -37,29 +40,12 @@ public class SecureRateConManager {
     }
     
     @AuraEnabled()
-    public static void emailLoadPdf(String toAddress, Id loadId) {
-      PageReference pr = Page.ORCarrierRateConfirmation3;
-      pr.getParameters().put('id', String.valueOf(loadId));
-      Blob pdf = pr.getContentAsPDF();
-    
-      Messaging.EmailFileAttachment efa = new Messaging.EmailFileAttachment();
-      efa.setFileName('Load2.pdf');
-      efa.setBody(pdf);
-    
-      Messaging.SingleEmailMessage mail = new Messaging.SingleEmailMessage();
-      mail.setToAddresses(new String[]{ toAddress });
-      mail.setSubject('Load PDF');
-      mail.setPlainTextBody('See attached');
-      mail.setFileAttachments(new Messaging.EmailFileAttachment[]{ efa });
-      Messaging.sendEmail(new Messaging.SingleEmailMessage[]{ mail });
-    }
-    @AuraEnabled()
     public static Id saveLoadPdfToFiles(Id loadId) {
         PageReference pr = Page.ORCarrierRateConfirmation3;
         pr.getParameters().put('id', String.valueOf(loadId));
         Blob pdf = pr.getContentAsPDF();
 		rtms__Load__c load = [SELECT Name, Carrier_Name__c, rtms__Mode_Name__c FROM rtms__Load__c WHERE Id = :loadId LIMIT 1];
-    	String fileName = load.Name +  ' - ' + load.Carrier_Name__c +  ' - ' + load.rtms__Mode_Name__c + ' - ' + 'Carrier Rate and Load ConfirmationTesting123.pdf';        
+    	String fileName = load.Name +  ' - ' + load.Carrier_Name__c +  ' - ' + load.rtms__Mode_Name__c + ' - ' + 'Carrier Rate and Load Confirmation.pdf';        
         ContentVersion cv = new ContentVersion(
           Title = fileName,
           PathOnClient = fileName,
@@ -76,85 +62,146 @@ public class SecureRateConManager {
         );
         return cv.Id;
   	}
-    
-    @AuraEnabled()
-    public static List<String> getCarrierEmails(Id accountId){
-        List<AggregateResult> ars = [
-          SELECT Email
-          FROM Contact
-          WHERE AccountId = :accountId
-            AND rtms__Transportation_Role__c INCLUDES ('Quoting')
-            AND Email != null
-          GROUP BY Email
-        ];
-        List<String> uniqueEmails = new List<String>();
-        for (AggregateResult ar : ars) {
-          uniqueEmails.add(((String) ar.get('Email')).trim().toLowerCase());
+
+	@AuraEnabled()
+    public static Id isOnlyOneCarrierQuote(Id loadId) {
+        List<rtms__CarrierQuote__c> cqs = [SELECT Id, rtms__Accepted__c FROM rtms__CarrierQuote__c WHERE rtms__Load__c = :loadId];
+        if(cqs.size() == 1){
+            return cqs[0].Id;
         }
-        return uniqueEmails;
+        else{
+            return null;
+        }
+    }
+	@AuraEnabled()
+    public static Id isCarrierQuoteAccepted(Id loadId) {
+        List<rtms__CarrierQuote__c> cqs = [SELECT Id, rtms__Accepted__c FROM rtms__CarrierQuote__c WHERE rtms__Load__c = :loadId AND rtms__Accepted__c = true];
+        if(!cqs.isEmpty()){
+            if(cqs.size() == 1){
+                return cqs[0].Id;
+            }
+            else{
+                return null;
+            }
+        }
+        else{
+            return null;
+        }
     }
     
-    @AuraEnabled(cacheable=true)
-    public static EmailTemplate getTenderTemplate(Id recordId){
-        EmailTemplate emailTemp = [SELECT Id, Name, Subject, TemplateType, Body From EmailTemplate WHERE Name='Load Tender'];       	
-        List<rtms__Stop__c> stops = [SELECT rtms__Is_Pickup__c, rtms__Location2__r.Shipping_City_and_State__c, rtms__Appointment_Time__c, rtms__Expected_Date__c FROM rtms__Stop__c WHERE rtms__Load__c = :recordId];
-        Messaging.SingleEmailMessage renderedEmail = Messaging.renderStoredEmailTemplate(emailTemp.Id, null, recordId);//contact id should be the carriers contact id
-        String renderedSubject = renderedEmail.getSubject();
-        emailTemp.Subject = renderedSubject;
-        emailTemp.Body = renderedEmail.htmlBody; 
-        return emailTemp;
+    @AuraEnabled()
+    public static rtms__CarrierQuote__c getCarrierQuote(String carrierQuoteId) {
+        List<rtms__CarrierQuote__c> cqs = [SELECT Name, 
+                                               rtms__Carrier_Service__r.Name, 
+                                               rtms__Carrier_Service__r.MC__c, 
+                                               rtms__Carrier_Service__r.rtms__Carrier__c, 
+                                               rtms__Carrier_Service__r.UD_DOT__c, 
+                                               rtms__Carrier_Total__c  FROM rtms__CarrierQuote__c WHERE Id = :carrierQuoteId LIMIT 1];
+       	return cqs[0];
+    }
+    
+    @AuraEnabled()
+    public static Map<String, String> getCarrierRateCon(Id loadId) {
+        Id carrierQuoteId = isOnlyOneCarrierQuote(loadId) != null ? isOnlyOneCarrierQuote(loadId) : isCarrierQuoteAccepted(loadId);
+        //TODO: need to figure out a way to gaurentee creation of the document 
+        if(carrierQuoteId != null){
+            rtms__Load__c load = [SELECT Name, rtms__Carrier__c, rtms__Carrier__r.Name, rtms__Mode_Name__c, rtms__Carrier__r.rtms__Transportation_Profile__r.Highway_Carrier_ID__c  FROM rtms__Load__c WHERE Id = :loadId LIMIT 1];
+            if(load.rtms__Carrier__c == null || load.Name == null || load.rtms__Mode_Name__c == null){
+                return new Map<String, String>{'message: ' => 'No carrier id/ load name/ mode name available'};
+            }
+            else{
+                String fileName = load.Name +  ' - ' + load.rtms__Carrier__r.Name + ' - ' + 'Carrier Rate and Load Confirmation.pdf';
+                System.debug('fileName: ' + fileName);
+                List<ContentVersion> cvs = [SELECT Id FROM ContentVersion WHERE Title = :fileName ORDER BY CreatedDate DESC LIMIT 1]; //TOOD may not need check this
+                if(cvs.isEmpty()){
+                    return new Map<String, String>{'message: ' => 'No file available'};
+                }
+                else{
+                    return new Map<String, String>{'contentVersionId' => cvs[0].Id, 'carrierId' => load.rtms__Carrier__c, 'carrierQuoteId' => carrierQuoteId, 'highwayCarrierId' => load.rtms__Carrier__r.rtms__Transportation_Profile__r.Highway_Carrier_ID__c};
+                }
+            }
+        }
+        else{
+            return new Map<String, String>{'message: ' => 'No Quote accepted'};
+        }
     }
     
     @AuraEnabled
-    public static String launchEmailFlow(String fromWho, String subject, String body, String templateName, String loadId, String userId, Id carrierId,  List<String> recipients, Id contentVersionId){
-        try{
-            String status = '';
-            String replacedBody = body;
-            //make sure this is set as first
-            Map<String, Object> flowInputs = new Map<String, Object>{
-                'FromWho' => fromWho,
-                'ToList' => 'takunp@openroad.inc',
-                'CCList' => null,
-                'BCCList' => null,
-                'EmailSubject' => subject,
-                'EmailBody' => replacedBody,
-                'TemplateName' => templateName,
-                'ContentVersionId' => contentVersionId
-            };
-            if(Test.isRunningTest()){
-                status = 'MOCK_STATUS ' + flowInputs.get('EmailBody');//have this returned for a test to check the email Body
+    public static List<User> getValidUsers() {
+        List<User> users = [
+        	SELECT Name, FirstName, LastName, Email
+            FROM User
+            WHERE IsActive = true
+            AND (Email LIKE '%@openroad.inc' OR Email LIKE '%@openroadtrans.com' OR Email LIKE '%@openroadfs.com')
+            ORDER BY Name
+        ];
+        Set<String> seen = new Set<String>();
+        List<User> uniqueUsers = new List<User>();
+        for (User u : users) {
+            if (u.Email == null) continue;
+            String key = u.Email.trim().toLowerCase();
+            if (!seen.contains(key)) {
+                seen.add(key);
+                uniqueUsers.add(u);
             }
-            else{
-                Flow.Interview.OR_Custom_LWC_Email flowInterview = new Flow.Interview.OR_Custom_LWC_Email(flowInputs);
-                flowInterview.start();
-                status = (String)flowInterview.getVariableValue('Status');  
-            }
-            // if(status == 'SUCCESS' || Test.isRunningTest()){
-            //     OpenRoad_Message__c newORMessage = new OpenRoad_Message__c();
-            //     newORMessage.Message_Type__c = 'Carrier Secure Rate Con'; 
-            //     newORMessage.Quote_Received__c = null; 
-            //     newORMessage.Related_Load__c = loadId; 
-            //     newORMessage.Sent_By__c = userId;
-            //     newORMessage.Sent_Date_Time__c = Datetime.now();
-            //     newORMessage.Sent_To_Account__c = carrierId; 
-            //     newORMessage.Sent_To_Email__c = recipient;
-            //     newORMessage.Sent_To_Phone_Number__c = null;
-            //     newORMessage.Sent_Via__c = 'Email';   
-            //     try{
-            //         insert newORMessage;
-            //     } catch (DMLException e){
-            //         System.debug('Error creating Contact: ' + e.getMessage());
-            //         return 'FAIL: Error creating Contact: ' + e.getMessage();
-            //     }
-            // }
-            // else{//failed 
-            //     System.debug('The flow has failed');
-            //     return 'The flow has failed';
-            // }
-            return status != null ? status : 'SUCCESS';
-        }catch (Exception e){
-            System.debug('Flow error: ' + e.getMessage());
-            return 'Flow error: ' + e.getMessage();
+        }
+        return uniqueUsers;
+    }
+    
+    
+    
+    @AuraEnabled
+    public static String highwayRateConAPI(String fromWho, String subject, String loadId, String highwayCarrierId,  List<String> recipients, Id contentVersionId){
+        
+        String boundary = '----' + String.valueOf(Math.abs(Crypto.getRandomInteger()));
+        String crlf = '\r\n';
+        API_key__mdt ApiKey = [SELECT Api_Credential__c
+            FROM API_key__mdt
+            WHERE DeveloperName = 'HighwayStagingAPIKey'
+            LIMIT 1];
+        String bearerToken = ApiKey.Api_Credential__c;
+        ContentVersion cv = [SELECT Title, VersionData FROM ContentVersion WHERE Id = :contentVersionId LIMIT 1];
+        String textParts = '--' + boundary + crlf +
+            'Content-Disposition: form-data; name="rate_confirmation[broker_load_owner_email]"' + crlf + crlf + 'takunp@openroad.inc' + crlf +
+            '--' + boundary + crlf +
+            'Content-Disposition: form-data; name="rate_confirmation[external_id]"' + crlf + crlf + '51661' + crlf +
+            '--' + boundary + crlf +
+            'Content-Disposition: form-data; name="rate_confirmation[carrier_id]"' + crlf + crlf + highwayCarrierId + crlf +
+            '--' + boundary + crlf +
+            'Content-Disposition: form-data; name="rate_confirmation[external_load_id]"' + crlf + crlf + loadId + crlf +
+            '--' + boundary + crlf +
+            'Content-Disposition: form-data; name="rate_confirmation[subject]"' + crlf + crlf + subject + crlf +
+            '--' + boundary + crlf + 
+            'Content-Disposition: form-data; name="rate_confirmation[targeted_emails]"' + crlf + crlf + 'dot01006144@rates.staging.highway.com' + crlf;
+        
+        Blob headerBlob = Blob.valueOf(textParts);
+
+        Blob fileHeader = Blob.valueOf('--' + boundary + crlf +
+        'Content-Disposition: form-data; name="rate_confirmation[attachments][]"; filename="' + cv.Title + '"' + crlf +
+        'Content-Type: application/pdf' + crlf + crlf);
+
+        Blob closing = Blob.valueOf(crlf + '--' + boundary + '--' + crlf);
+        
+        String hexHeaderBlob = EncodingUtil.convertToHex(headerBlob);
+        String hexFileHeader = EncodingUtil.convertToHex(fileHeader);
+        String hexClosing = EncodingUtil.convertToHex(closing);
+        String hexFileData = EncodingUtil.convertToHex(cv.VersionData);
+        Blob bodyBlob = EncodingUtil.convertFromHex(hexHeaderBlob + hexFileHeader + hexFileData + hexClosing);
+        HttpRequest req = new HttpRequest();
+        req.setEndpoint('https://staging.highway.com/core/connect/external_api/v1/rate_confirmations');
+        req.setMethod('POST');
+        req.setHeader('Content-Type', 'multipart/form-data; boundary=' + boundary);
+        req.setHeader('Authorization','Bearer ' + bearerToken);
+        req.setHeader('Accept', 'application/json');
+        req.setBodyAsBlob(bodyBlob);
+        Http http = new Http();
+        try {
+            HttpResponse res = http.send(req);
+            System.debug('status code: ' + String.valueOf(res.getStatusCode()) + ':' + res.getBody());
+            return (String.valueOf(res.getStatusCode()) + ':' + res.getBody());
+        } catch (Exception e) {
+            System.debug('Callout error: ' + e.getMessage());
+            return ('Callout error: ' + e.getMessage());
         }
     }
     

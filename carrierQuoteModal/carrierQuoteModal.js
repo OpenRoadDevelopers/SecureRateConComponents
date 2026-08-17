@@ -3,6 +3,7 @@ import getCarrierQuotes from '@salesforce/apex/SecureRateConManager.getCarrierQu
 import setCarrier from '@salesforce/apex/SecureRateConManager.setCarrier';
 import saveLoadPdfToFiles from '@salesforce/apex/SecureRateConManager.saveLoadPdfToFiles';
 export default class CarrierQuoteModal extends LightningElement {
+    highwayCarrierId = null;
     isModalOpen = false;
     quotes = [];
     selectedCarrier = null;
@@ -13,11 +14,12 @@ export default class CarrierQuoteModal extends LightningElement {
         console.log('Carrier Quote Modal connected');
     }
 
-    @api openModal(recordId) {
+    @api openModal(recordId, highwayCarrierId) {
         this.recordId = recordId;
         this.isModalOpen = true;
+        this.highwayCarrierId = highwayCarrierId;
         console.log('Carrier Quote Modal opened');
-        console.log('In carrier quote modal record id:', this.recordId);
+        console.log('In carrier quote modal record id:', this.recordId, 'highwayCarrierId:', this.highwayCarrierId);
         getCarrierQuotes({ loadId: this.recordId })
             .then(result => {
                 console.log('Carrier quotes retrieved:', result);
@@ -39,8 +41,6 @@ export default class CarrierQuoteModal extends LightningElement {
                 console.error('Error retrieving carrier quotes:', error);
                 this.isLoading = false;
             });
-
-
     }
     
     @api closeModal() {
@@ -85,7 +85,7 @@ export default class CarrierQuoteModal extends LightningElement {
             if (pdfResult) {
                 console.log('dispatching nextmodal event with loadId:', this.recordId, 'and contentDocumentId:', pdfResult);
                 this.dispatchEvent(new CustomEvent('nextmodal', {
-                    detail: { loadId: this.recordId, contentVersionId: pdfResult, carrierId: this.selectedCarrier}, 
+                    detail: { loadId: this.recordId, contentVersionId: pdfResult, carrierId: this.selectedCarrier, carrierQuoteId: this.selectedQuoteId, highwayCarrierId: this.highwayCarrierId }, 
                     bubbles: true, 
                     composed: true
                 }));
