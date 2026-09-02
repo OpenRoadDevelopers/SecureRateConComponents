@@ -1,7 +1,69 @@
 <template>
-    <c-carrier-quote-modal onnextmodal={handleNextModal}></c-carrier-quote-modal>
-    <c-rate-con-email-modal></c-rate-con-email-modal>
-    <div class="slds-text-align_right">
-        <lightning-button variant="brand" label="Secure Rate Confirmation" title="" onclick={handleOpenmodal}></lightning-button>
-    </div>
+    <lightning-card title="Carrier Quote" icon-name="standard:quotes">
+        <div class="slds-notify slds-notify_alert slds-theme_success" role="alert">
+            <p>{banner}</p>
+        </div>
+        <lightning-input
+            type="checkbox"
+            label="Use Secure Rate Confirmation"
+            checked={isRequireRateCon}
+            disabled={isRequireRateConDisabled}
+            onchange={handleRequireRateConChange}>
+        </lightning-input>
+        <div class="slds-p-horizontal_medium slds-p-bottom_medium">
+                <div class="slds-grid slds-wrap slds-grid_align-spread slds-grid_vertical-align-center">
+                    <template if:true={isShowStatus}>
+                        <div class="slds-m-bottom_small">
+                            <p class="slds-text-title_caps slds-text-color_weak">Current Status</p>
+                            <span class="slds-badge slds-theme_success">
+                                {status}
+                            </span>
+                        </div>
+                    </template>
+                    
+                    <template if:true={isShowButton}>
+                        <lightning-button
+                            variant="brand"
+                            label={buttonName}
+                            title={buttonName}
+                            icon-name="utility:forward"
+                            icon-position="right"
+                            onclick={handleOpenmodal}>
+                        </lightning-button>
+                    </template>
+                </div>
+                <template if:true={isShowStatus}>
+                    <div class="slds-m-top_medium slds-grid slds-wrap slds-gutters">
+                        <div class="slds-col slds-size_1-of-1 slds-medium-size_1-of-2">
+                            <div class="slds-box slds-box_x-small slds-theme_default">
+                                <p class="slds-text-title_caps slds-text-color_weak">
+                                    Date and Time
+                                </p>
+                                <p class="slds-text-heading_small">
+                                    {datetime}
+                                </p>
+                            </div>
+                        </div>
+
+                        <div class="slds-col slds-size_1-of-1 slds-medium-size_1-of-2">
+                            <div class="slds-box slds-box_x-small slds-theme_default">
+                                <p class="slds-text-title_caps slds-text-color_weak">
+                                    Status
+                                </p>
+                                <p class="slds-text-heading_small">
+                                    {status}
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </template>
+        </div>
+    </lightning-card>
+
+    <c-carrier-quote-modal
+        onnextmodal={handleNextModal}>
+    </c-carrier-quote-modal>
+
+    <c-rate-con-email-modal>
+    </c-rate-con-email-modal>
 </template>

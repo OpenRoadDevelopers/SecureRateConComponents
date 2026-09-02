@@ -35,10 +35,11 @@ export default class CarrierQuoteModal extends LightningElement {
                         };
                     });
                 }
-                this.isLoading = false;
             })
             .catch(error => {
                 console.error('Error retrieving carrier quotes:', error);
+            })
+            .then(() => {
                 this.isLoading = false;
             });
     }
@@ -99,3 +100,5 @@ export default class CarrierQuoteModal extends LightningElement {
         
     }
 }
+
+

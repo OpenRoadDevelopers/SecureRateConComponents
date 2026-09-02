@@ -3,7 +3,7 @@ import { ShowToastEvent } from 'lightning/platformShowToastEvent';
 import USER_ID from '@salesforce/user/Id';
 import { getRecord } from 'lightning/uiRecordApi';
 import getCarrierQuote from '@salesforce/apex/SecureRateConManager.getCarrierQuote';
-import highwayRateConAPI from '@salesforce/apex/SecureRateConManager.highwayRateConAPI';
+import postToHighway from '@salesforce/apex/SecureRateConManager.postToHighway';
 import getValidUsers from '@salesforce/apex/SecureRateConManager.getValidUsers';
 const USER_FIELDS = ['User.Email', 'User.Name'];
 export default class RateConEmailModal extends LightningElement {
@@ -102,22 +102,24 @@ export default class RateConEmailModal extends LightningElement {
         this.userSearch = event.target.value;
     }
 
-    sendEmail(){
-        highwayRateConAPI({
+    sendToHighway(){
+        postToHighway({
             fromWho: this.userName,
             subject: null,
             loadId: this.recordId,
             highwayCarrierId: this.highwayCarrierId,
             recipients: this.toEmails,
-            contentVersionId: this.contentVersionId
+            contentVersionId: this.contentVersionId,
+            carrierQuoteId: this.carrierQuoteId,
+            isCancel: false
         })
         .then(result => {
             console.log('Email flow launched successfully:', result);
-            if(result == 'SUCCESS'){
+            if(result.statusCode == '201' || result.statusCode == '200'){
                 this.handleSuccessfulEmailSent();
             }
             else{
-                this.handleFailureEmailSent();
+                this.handleFailureEmailSent(result.error);
             }
             this.closeModal();
         })
@@ -162,10 +164,10 @@ export default class RateConEmailModal extends LightningElement {
         this.dispatchEvent(event);
     }
     
-    handleFailureEmailSent() {
+    handleFailureEmailSent(errorMessage) {
         const event = new ShowToastEvent({
             title: 'Error',
-            message: 'Failed to send email',
+            message: 'Failed to send email: ' + errorMessage,
             variant: 'error',
             mode: 'sticky'
         });

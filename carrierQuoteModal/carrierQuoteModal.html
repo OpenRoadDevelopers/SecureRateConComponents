@@ -11,11 +11,29 @@
                     <h2 class="slds-text-heading_medium">Carrier Quote</h2>
                 </header>
                 <template if:true={isLoading}>
-                    <div class="slds-modal__content slds-p-around_small carrier-quote-modal-content">
-                        <div class="slds-spinner slds-spinner_medium slds-spinner_brand">
-                            <span class="slds-assistive-text">Loading</span>
-                            <div class="slds-spinner__dot-a"></div>
-                            <div class="slds-spinner__dot-b"></div>
+                    <div class="slds-modal__content  carrier-quote-modal-content" style="padding: 2rem;">
+                        <div class="slds-text-align_center">
+                            <div class="slds-spinner slds-spinner_medium slds-spinner_brand">
+                                <span class="slds-assistive-text">Loading</span>
+                                <div class="slds-spinner__dot-a"></div>
+                                <div class="slds-spinner__dot-b"></div>
+                            </div>
+                            <p style="margin-top: 6rem;">
+                                Loading
+                                <span aria-hidden="true">
+                                    <svg width="24" height="12" viewBox="0 0 24 12" xmlns="http://www.w3.org/2000/svg" style="vertical-align: middle;">
+                                        <text x="2" y="10" font-size="12">.
+                                            <animate attributeName="opacity" values="0;1;1;1;0" dur="1.2s" repeatCount="indefinite"/>
+                                        </text>
+                                        <text x="9" y="10" font-size="12">.
+                                            <animate attributeName="opacity" values="0;0;1;1;0" dur="1.2s" repeatCount="indefinite"/>
+                                        </text>
+                                        <text x="16" y="10" font-size="12">.
+                                            <animate attributeName="opacity" values="0;0;0;1;0" dur="1.2s" repeatCount="indefinite"/>
+                                        </text>
+                                    </svg>
+                                </span>
+                            </p>
                         </div>
                     </div>
                 </template>
@@ -70,7 +88,7 @@
                 </template>
                 <footer class="slds-modal__footer">
                     <lightning-button 
-                        label="Cancel" 
+                        label="Close" 
                         onclick={closeModal}>
                     </lightning-button>
                     
