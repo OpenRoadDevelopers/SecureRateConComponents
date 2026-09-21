@@ -1,0 +1,25 @@
+.toggle-wrapper {
+  display: inline-flex;
+  align-items: center;
+  position: relative;
+  border-radius: 6px; /* matches soft corners so outline looks clean */
+  padding: 0.15rem;    /* prevents outline clipping when we scale the toggle */
+}
+
+/* enabled: subtle light-blue outline */
+.toggle-wrapper.enabled {
+  box-shadow: 0 0 0 3px rgba(3,169,244,0.18); /* light blue ring */
+  transition: box-shadow 160ms ease;
+}
+
+/* slightly stronger on hover/focus for discoverability */
+.toggle-wrapper.enabled:hover,
+.toggle-wrapper.enabled:focus-within {
+  box-shadow: 0 0 0 4px rgba(3,169,244,0.28);
+}
+
+/* keep existing disabled visual if you want it dimmed */
+.toggle-wrapper.disabled {
+  opacity: 0.56;
+  filter: grayscale(40%);
+}
