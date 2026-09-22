@@ -10,7 +10,6 @@ private class HighwayRateConWebTest {
         insert load;
         rtms__TransportationProfile__c tp = new rtms__TransportationProfile__c(
             Name='Test Transportation Profile',
-            RecordTypeId = '0123g0000001X7yAAE'
         );
         insert tp;
         rtms__Mode__c mode = new rtms__Mode__c(
