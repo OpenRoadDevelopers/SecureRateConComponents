@@ -39,7 +39,7 @@ private class FlowSecureRateConTest {
             rtms__Total_Weight__c = 0,
             rtms__Mode__c = truckLoadRecord.Id,
             rtms__Load_Status__c = 'Quotes Received',
-            Require_Secure_Rate_Con__c = false
+            Use_Secure_Rate_Con__c = false
         );
         insert load;
 
@@ -61,6 +61,7 @@ private class FlowSecureRateConTest {
             Secure_Rate_Con_Status__c = 'delivered',
             rtms__Load__c = load.Id,
             rtms__Vendor__c = acc.Id,
+            rtms__Carrier_Total__c   = 500,
             rtms__Carrier_Service__c = carrierService.Id,
             Secure_Rate_Con_Last_Update__c = System.now(),
             rtms__Accepted__c = true
@@ -123,7 +124,7 @@ private class FlowSecureRateConTest {
             rtms__Total_Weight__c = 0,
             rtms__Mode__c = truckLoadRecord.Id,
             rtms__Load_Status__c = 'Quotes Received',
-            Require_Secure_Rate_Con__c = false
+            Use_Secure_Rate_Con__c = false
         );
         insert load;
 
@@ -145,6 +146,7 @@ private class FlowSecureRateConTest {
             Secure_Rate_Con_Status__c = 'delivered',
             rtms__Load__c = load.Id,
             rtms__Vendor__c = acc.Id,
+            rtms__Carrier_Total__c   = 500,
             rtms__Carrier_Service__c = carrierService.Id,
             Secure_Rate_Con_Last_Update__c = System.now(),
             rtms__Accepted__c = true
@@ -197,7 +199,7 @@ private class FlowSecureRateConTest {
 
         // Assert
         System.assertEquals(1, responses.size());
-        System.assertEquals('411', responses[0].statusCode);
+        System.assertEquals('DISABLED', responses[0].statusCode);
         System.assertEquals('disabled by trigger control', responses[0].responseBody);
     }
     
@@ -225,7 +227,7 @@ private class FlowSecureRateConTest {
             rtms__Total_Weight__c = 0,
             rtms__Mode__c = truckLoadRecord.Id,
             rtms__Load_Status__c = 'Quotes Received',
-            Require_Secure_Rate_Con__c = false
+            Use_Secure_Rate_Con__c = false
         );
         insert load;
 
@@ -247,6 +249,7 @@ private class FlowSecureRateConTest {
             Secure_Rate_Con_Status__c = 'delivered',
             rtms__Load__c = load.Id,
             rtms__Vendor__c = acc.Id,
+            rtms__Carrier_Total__c   = 500,
             rtms__Carrier_Service__c = carrierService.Id,
             Secure_Rate_Con_Last_Update__c = System.now(),
             rtms__Accepted__c = true, 
@@ -264,7 +267,7 @@ private class FlowSecureRateConTest {
         Test.stopTest();
     
         System.assertEquals(1, responses.size());
-        System.assertEquals('412', responses[0].statusCode);
+        System.assertEquals('PREVIOUSLY_CANCELLED_OR_REJECTED', responses[0].statusCode);
         System.assert(responses[0].responseBody.contains('Carrier Quote Already Cancelled/Rejected'));
     }
 
@@ -288,7 +291,7 @@ private class FlowSecureRateConTest {
         Test.stopTest();
     
         System.assertEquals(1, responses.size());
-        System.assertEquals('413', responses[0].statusCode);
+        System.assertEquals('NOT_FOUND', responses[0].statusCode);
         System.assert(responses[0].responseBody.contains('CarrierQuoteId Not found'));
     }
     
@@ -318,7 +321,7 @@ private class FlowSecureRateConTest {
             rtms__Total_Weight__c = 0,
             rtms__Mode__c = truckLoadRecord.Id,
             rtms__Load_Status__c = 'Quotes Received',
-            Require_Secure_Rate_Con__c = false
+            Use_Secure_Rate_Con__c = false
         );
         insert load;
 
@@ -340,6 +343,7 @@ private class FlowSecureRateConTest {
             Secure_Rate_Con_Status__c = 'cancelled',
             rtms__Load__c = load.Id,
             rtms__Vendor__c = acc.Id,
+            rtms__Carrier_Total__c   = 500,
             rtms__Carrier_Service__c = carrierService.Id,
             Secure_Rate_Con_Last_Update__c = System.now(),
             rtms__Accepted__c = true
@@ -384,7 +388,7 @@ private class FlowSecureRateConTest {
             rtms__Total_Weight__c = 0,
             rtms__Mode__c = truckLoadRecord.Id,
             rtms__Load_Status__c = 'Quotes Received',
-            Require_Secure_Rate_Con__c = false
+            Use_Secure_Rate_Con__c = false
         );
         insert load;
 
@@ -406,6 +410,7 @@ private class FlowSecureRateConTest {
             Secure_Rate_Con_Status__c = 'rejected',
             rtms__Load__c = load.Id,
             rtms__Vendor__c = acc.Id,
+            rtms__Carrier_Total__c   = 500,
             rtms__Carrier_Service__c = carrierService.Id,
             Secure_Rate_Con_Last_Update__c = System.now(),
             rtms__Accepted__c = true
@@ -422,7 +427,7 @@ private class FlowSecureRateConTest {
         Test.stopTest();
     
         System.assertEquals(1, responses.size());
-        System.assertEquals('204', responses[0].statusCode);
+        System.assertEquals('ALREADY_REJECTED', responses[0].statusCode);
         System.assert(responses[0].responseBody.contains('CarrierQuote is already rejected'));
     }
 }

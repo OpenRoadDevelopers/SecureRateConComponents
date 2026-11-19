@@ -19,7 +19,7 @@ public class FlowSecureRateCon {
     public static List<FlowPostResponse> flowPostToHighway(List<FlowPostRequest> requests){ 
         if(ORD_Trigger_Control__c.getOrgDefaults().Disable_Flow_Secure_Rate_Con__c){
             List<FlowPostResponse> responses = new List<FlowPostResponse>();
-            responses.add(new FlowPostResponse('411', 'disabled by trigger control'));
+            responses.add(new FlowPostResponse('DISABLED', 'disabled by trigger control'));
             return responses;
         }
         List<FlowPostResponse> responses = new List<FlowPostResponse>();
@@ -27,11 +27,11 @@ public class FlowSecureRateCon {
             if(r.carrierQuoteId == null){
                 rtms__CarrierQuote__c cq = SecureRateConManager.getCarrierQuote(r.isCancel, r.loadId);
                  if(cq == null){
-                    responses.add(new FlowPostResponse('413', 'CarrierQuoteId Not found for ' + r.loadId));
+                    responses.add(new FlowPostResponse('NOT_FOUND', 'CarrierQuoteId Not found for ' + r.loadId));
                     return responses;
                 }
                 if(cq.Secure_Rate_Con_Cancelled_Rejected__c != null){
-                    responses.add(new FlowPostResponse('412', 'Carrier Quote Already Cancelled/Rejected'));
+                    responses.add(new FlowPostResponse('PREVIOUSLY_CANCELLED_OR_REJECTED', 'Carrier Quote Already Cancelled/Rejected'));
             		return responses;
                 }
                 if(r.isCancel){
@@ -39,7 +39,7 @@ public class FlowSecureRateCon {
                         continue; //skip if already cancelled
                     }
                     if(cq.Secure_Rate_Con_Status__c == 'rejected'){
-                        responses.add(new FlowPostResponse('204', 'CarrierQuote is already rejected no cancel request sent' + r.loadId));
+                        responses.add(new FlowPostResponse('ALREADY_REJECTED', 'CarrierQuote is already rejected no cancel request sent' + r.loadId));
                         continue; 
                     }
                 }
@@ -48,29 +48,26 @@ public class FlowSecureRateCon {
             }
             Id contentVersionId;
             if(!r.isCancel){
-               Blob pdf = null;
-               try{
-                if (Test.isRunningTest()) {
-                    pdf = Blob.valueOf('TEST PDF PLACEHOLDER');
-                }
-                else{
-                    PageReference pr = Page.ORCarrierRateConfirmation3;
-                    pr.getParameters().put('id', String.valueOf(r.loadId));
-                    pr.getParameters().put('isSecureRateCon', 'true');
-                    pr.getParameters().put('carrierQuoteId', String.valueOf(r.carrierQuoteId));
-                    pdf = pr.getContentAsPDF();
-                    if (pdf == null || pdf.size() < 200) {
-                        responses.add(new FlowPostResponse('415', 'Empty or too-small PDF for ' + r.loadId));
-                        return responses;
+                Blob pdf = null;
+                try {
+                    if (Test.isRunningTest()) {
+                        pdf = Blob.valueOf('TEST PDF PLACEHOLDER');
+                    } else {
+                        PageReference pr = Page.ORCarrierRateConfirmation3;
+                        pr.getParameters().put('id', String.valueOf(r.loadId));
+                        pr.getParameters().put('isSecureRateCon', 'true');
+                        pr.getParameters().put('carrierQuoteId', String.valueOf(r.carrierQuoteId));
+                        pdf = pr.getContentAsPDF();
+                        if (pdf == null || pdf.size() < 200) {
+                            responses.add(new FlowPostResponse('Document_Error', 'Empty or too-small PDF for ' + r.loadId));
+                            return responses;
+                        }
                     }
-                }
-                
+                } catch (ORCarrierRateConfirmationController.CarrierQuoteNotFoundException e) {
+                    responses.add(new FlowPostResponse('NOT_FOUND', 'CarrierQuoteId Not found for ' + r.loadId));
+                    return responses;
                 } catch (Exception ex) {
-                    if (ex instanceof ORCarrierRateConfirmationController.CarrierQuoteNotFoundException) {
-                        responses.add(new FlowPostResponse('413', 'CarrierQuoteId Not found for ' + r.loadId));
-                        return responses; // or continue, depending on desired flow
-                    }
-                    responses.add(new FlowPostResponse('416', 'Failed to generate rate confirmation PDF for ' + r.loadId));
+                    responses.add(new FlowPostResponse('Document_Error', 'Failed to generate rate confirmation PDF for ' + r.loadId));
                     return responses;
                 }
     
@@ -91,6 +88,7 @@ public class FlowSecureRateCon {
                 );
                 contentVersionId = cv.Id;
             }
+            SecureRateConManager.setSecureRateConStatus(carrierQuoteId, 'pending');
             System.enqueueJob(new HighwayCalloutJob(contentVersionId, r.fromWho, r.subject, r.loadId, r.highwayCarrierId, r.recipients, r.carrierQuoteId, r.isCancel));
             responses.add(new FlowPostResponse('queued', String.valueOf(contentVersionId)));
         }

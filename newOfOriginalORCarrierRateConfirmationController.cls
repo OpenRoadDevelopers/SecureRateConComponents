@@ -2,6 +2,8 @@
 * Copyright 2015-2022 Revenova, LLC. All rights reserved.
 */
 public with sharing class ORCarrierRateConfirmationController {
+
+
 public class StopWithImages {
     public rtms__Stop__c stop { get; set; }
     public List<String> imageIds { get; set; }
@@ -61,13 +63,20 @@ public String orgDomainUrl { get; set; }
         }
         if(isSecureRateCon){
             m_quote = grabAcceptedCarrierQuote(carrierQuoteId);
+            System.debug('m_quote after grabAcceptedCarrierQuote: ' + m_quote);
         }
         else{
             m_quote = ORDB.getAcceptedCarrierQuoteForLoad(m_load.Id);
         }
-        
         System.debug('m_quote: ' + m_quote);
-        m_quoteAccessorials = ORDB.getQuoteAccessorials(m_quote.Id);
+        if(m_quote == null){
+            m_quote = new rtms__CarrierQuote__c(); 
+            m_quoteAccessorials = new List<rtms__QuoteAccessorial__c>();
+        }
+        else{
+            m_quoteAccessorials = ORDB.getQuoteAccessorials(m_quote.Id);
+        }
+        
         m_stops = ORDB.getStops(m_load.Id);
         m_lineItems = ORDB.getLineItems(m_Load.Id);
         m_options = ORUtil.getDocumentOptions(m_load);
@@ -113,26 +122,39 @@ public String orgDomainUrl { get; set; }
         }
     }
     
+    
+    
+    //---------------------
+    // getters/setters
+    //---------------------
+    
+	//only used for secure rate con that will grab the accepted carier quote information
     public static rtms__CarrierQuote__c grabAcceptedCarrierQuote(Id carrierQuoteId) {
         System.debug('IN Grab accepted carrier quote: carrier quote Id ' + carrierQuoteId );
         if(carrierQuoteId == null) {
             return null;
         }
         try {
-            return [SELECT Id, Name, rtms__Net_Line_Haul__c, rtms__Fuel_Surcharge__c, rtms__Accessorial_Charges__c, rtms__Carrier_Total__c, rtms__Vendor__c, rtms__Carrier_Service__c
+            List<rtms__CarrierQuote__c> cqs = null;
+            cqs = [SELECT Id, Name, rtms__Net_Line_Haul__c, rtms__Fuel_Surcharge__c, rtms__Accessorial_Charges__c, rtms__Carrier_Total__c, rtms__Vendor__c, rtms__Carrier_Service__c
                     FROM rtms__CarrierQuote__c
                     WHERE Id = :carrierQuoteId
                     AND (rtms__Carrier_Service__r.rtms__Service_Type__c = 'Carrier' OR rtms__Carrier_Service__r.rtms__Service_Type__c = null)
                     LIMIT 1];
-            // System.debug('quote: ' + quote);
-            // System.debug('rtms__Net_Line_Haul__c:' + quote.rtms__Net_Line_Haul__c);
-            // System.debug('rtms__Fuel_Surcharge__c:' + quote.rtms__Fuel_Surcharge__c);
-            // System.debug('rtms__Accessorial_Charges__c:' + quote.rtms__Accessorial_Charges__c);
-            // System.debug('rtms__Carrier_Total__c:' + quote.rtms__Carrier_Total__c);
-            // System.debug('rtms__Vendor__c:' + quote.rtms__Vendor__c);
-            // System.debug('rtms__Carrier_Service__c:' + quote.rtms__Carrier_Service__c);
-            // System.debug('Id:' + quote.Id);
-            // return quote;
+            
+           	if(cqs != null && !cqs.isEmpty()) {
+                System.debug('FOUND accepted carrier quote: ' + cqs[0]);
+                System.debug('Id:' + cqs[0].Id);
+                System.debug('rtms__Net_Line_Haul__c:' + cqs[0].rtms__Net_Line_Haul__c);
+                System.debug('rtms__Fuel_Surcharge__c:' + cqs[0].rtms__Fuel_Surcharge__c);
+                System.debug('rtms__Accessorial_Charges__c:' + cqs[0].rtms__Accessorial_Charges__c);
+                System.debug('rtms__Carrier_Total__c:' + cqs[0].rtms__Carrier_Total__c);
+                System.debug('rtms__Vendor__c:' + cqs[0].rtms__Vendor__c);
+                System.debug('rtms__Carrier_Service__c:' + cqs[0].rtms__Carrier_Service__c);
+                return cqs[0];
+            }
+            System.debug('returning null for the carrier quotes DID NOT FIND ANYTHING');
+            return null;
         }
         catch(Exception e) {
             System.debug('******************* EXCEPTION IN getAcceptedCarrierQuoteForLoad ' + e);
@@ -140,10 +162,6 @@ public String orgDomainUrl { get; set; }
         }
     }
     
-    //---------------------
-    // getters/setters
-    //---------------------
-
     // note that we pass a "fake" account for those stops without an account (yet)
     public Account getShipFrom() {
             

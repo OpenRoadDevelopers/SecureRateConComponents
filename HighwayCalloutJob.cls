@@ -21,17 +21,14 @@ public class HighwayCalloutJob implements Queueable, Database.AllowsCallouts {
 
     public void execute(QueueableContext ctx) {
         String boundary = '----' + String.valueOf(Math.abs(Crypto.getRandomInteger()));
-        Blob bodyBlob = SecureRateConManager.buildRequestBody(fromWho, subject, loadId, highwayCarrierId, recipients, contentVersionId, carrierQuoteId, boundary, isCancel);
-        
-        API_key__mdt ApiKey = [SELECT Api_Credential__c FROM API_key__mdt WHERE DeveloperName = 'HighwayStagingAPIKey' LIMIT 1];
-        String bearerToken = ApiKey.Api_Credential__c;
+        Blob bodyBlob = SecureRateConManager.buildRequestBody(fromWho, subject, loadId, highwayCarrierId, recipients, contentVersionId, carrierQuoteId, boundary, isCancel);        
         List<String> notify = new List<String>{ 'IT@openroad.inc' };
         Http http = new Http();
         try {
-            HttpResponse res = SecureRateConManager.sendRequest(bodyBlob, boundary, bearerToken);
+            setSecureRateConStatus(carrierQuoteId, 'pending');
+            HttpResponse res = SecureRateConManager.sendRequest(bodyBlob, boundary);
             Integer status = res.getStatusCode();
-            SecureRateConManager.handleStatus(status, res.getBody(), fromWho, subject, loadId, highwayCarrierId, recipients, contentVersionId, carrierQuoteId, isCancel, bodyBlob, boundary, bearerToken);
-            System.debug('HighwayCalloutJob: status=' + res.getStatus() + ' code=' + res.getStatusCode());
+            SecureRateConManager.handleStatus(status, res.getBody(), fromWho, subject, loadId, highwayCarrierId, recipients, contentVersionId, carrierQuoteId, isCancel, bodyBlob, boundary);
         } catch (Exception e) {
             SecureRateConManager.handleCalloutError(e, loadId, carrierQuoteId, contentVersionId, this.fromWho);
         }

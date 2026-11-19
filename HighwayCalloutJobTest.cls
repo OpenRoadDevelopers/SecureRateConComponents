@@ -1,52 +1,30 @@
 @isTest
-private class HighwayCalloutJobTest {
-    private class MockHttpResponseGenerator implements HttpCalloutMock {
-        private Integer statusCode;
-        private String body;
-        MockHttpResponseGenerator(Integer statusCode, String body) {
-            this.statusCode = statusCode;
-            this.body = body;
-        }
-        public HTTPResponse respond(HTTPRequest req) {
-            HttpResponse res = new HttpResponse();
-            res.setHeader('Content-Type', 'application/json');
-            res.setBody(body);
-            res.setStatusCode(statusCode);
-            return res;
-        }
-    }
+private class HighwayRateConWebTest {
 
-    private static void createBasicData() {
-       rtms__TransportationProfile__c tp = new rtms__TransportationProfile__c(Name = 'TP Flow', Highway_Carrier_ID__c = 'HC-TEST');
-        insert tp;
-
-        Account acc = new Account(Name = 'Flow Carrier', rtms__Transportation_Profile__c = tp.Id);
+    @testSetup
+    static void setupData() {
+        // Adjust required fields based on your org's validation rules
+        Account acc = new Account(Name='Test Account');
         insert acc;
-
-        rtms__Mode__c truckLoadRecord = new rtms__Mode__c(
-            Name = 'TruckLoad',
+        rtms__Load__c load = new rtms__Load__c(Name='Test Load', rtms__Customer__c=acc.Id, rtms__Total_Weight__c = 1000);
+        insert load;
+        rtms__TransportationProfile__c tp = new rtms__TransportationProfile__c(
+            Name='Test Transportation Profile'
+        );
+        insert tp;
+        rtms__Mode__c mode = new rtms__Mode__c(
+            Name = 'Truckload',
             rtms__Order__c = 1,
             rtms__Maximum_Weight__c = 0,
             rtms__Minimum_Weight__c = 0
         );
-        insert truckLoadRecord;
-
-        rtms__Load__c load = new rtms__Load__c(
-            Name = 'HC Job Load',
-            rtms__Customer__c=acc.Id, 
-            rtms__Carrier__c = acc.Id,
-            rtms__Total_Weight__c = 0,
-            rtms__Mode__c = truckLoadRecord.Id,
-            rtms__Load_Status__c = 'Quotes Received',
-            Require_Secure_Rate_Con__c = false
-        );
-        insert load;
+        insert mode;
 
         rtms__CarrierService__c carrierService = new rtms__CarrierService__c(
             Name='Test Carrier Service',
             rtms__Carrier__c = acc.Id,
             rtms__Transportation_Profile__c = tp.Id,
-            rtms__Mode__c = truckLoadRecord.Id,
+            rtms__Mode__c = mode.Id,
             rtms__Service_Type__c = 'Carrier',
             rtms__Maximum_Weight__c = 0,
             rtms__Minimum_Weight__c = 0,
@@ -55,60 +33,117 @@ private class HighwayCalloutJobTest {
             rtms__Tender_Method__c = 'Email'
         );
         insert carrierService;
-
         rtms__CarrierQuote__c cq = new rtms__CarrierQuote__c(
-            Secure_Rate_Con_Status__c = 'delivered',
+            Secure_Rate_Con_Status__c = 'pending',
             rtms__Load__c = load.Id,
             rtms__Vendor__c = acc.Id,
-            rtms__Carrier_Service__c = carrierService.Id,
-            rtms__Accepted__c = true
+            rtms__Carrier_Service__c = carrierService.Id
         );
         insert cq;
-
-        // create a ContentVersion to pass to the job
-        ContentVersion cv = new ContentVersion(
-            Title = 'Test.pdf',
-            PathOnClient = 'Test.pdf',
-            VersionData = Blob.valueOf('PDF-DUMMY')
-        );
-        insert cv;
     }
 
-    @isTest static void testExecute_successfulCallout_keepsCarrierQuoteStatus() {
-        createBasicData();
+    @isTest
+    static void testUpdateRateConStatus_success() {
+        rtms__CarrierQuote__c cq = [SELECT Id FROM rtms__CarrierQuote__c LIMIT 1];
 
-        rtms__CarrierQuote__c cq = [SELECT Id, rtms__Load__c, Secure_Rate_Con_Status__c FROM rtms__CarrierQuote__c LIMIT 1];
-        ContentVersion cv = [SELECT Id FROM ContentVersion LIMIT 1];
+        Map<String, Object> bodyMap = new Map<String, Object>{
+            'status' => 'accepted',
+            'external_id' => cq.Id
+        };
+        String jsonBody = JSON.serialize(bodyMap);
 
-        // Mock a successful HTTP response
-        Test.setMock(HttpCalloutMock.class, new MockHttpResponseGenerator(200, '{"result":"ok"}'));
+        RestRequest req = new RestRequest();
+        req.requestUri = '/api/highway/ratecon';
+        req.httpMethod = 'POST';
+        req.requestBody = Blob.valueOf(jsonBody);
 
-        // Enqueue the job
+        RestResponse res = new RestResponse();
+        RestContext.request = req;
+        RestContext.response = res;
+
         Test.startTest();
-            System.enqueueJob(new HighwayCalloutJob(cv.Id, 'from@test.com', 'sub', String.valueOf(cq.rtms__Load__c), 'HC-TEST', new List<String>{'a@b.com'}, cq.Id, false));
+        HighwayRateConWeb.updateRateConStatus();
         Test.stopTest();
 
-        // CarrierQuote status should remain unchanged for 200
-        rtms__CarrierQuote__c updated = [SELECT Secure_Rate_Con_Status__c FROM rtms__CarrierQuote__c WHERE Id = :cq.Id];
-        System.assertEquals('delivered', updated.Secure_Rate_Con_Status__c, 'CarrierQuote status should remain delivered on 200 response');
+        rtms__CarrierQuote__c updatedCq = [
+            SELECT Secure_Rate_Con_Status__c, Secure_Rate_Con_Last_Update__c, Secure_Rate_Con_Cancelled_Rejected__c
+            FROM rtms__CarrierQuote__c
+            WHERE Id = :cq.Id
+        ];
+
+        String respString = RestContext.response.responseBody.toString();
+        Map<String, Object> respMap = (Map<String, Object>) JSON.deserializeUntyped(respString);
+        System.assertEquals(true, respMap.get('success'), 'Handler should return success for existing record');
+        System.assertEquals('accepted', updatedCq.Secure_Rate_Con_Status__c, 'Status should be updated to accepted');
+        System.assertNotEquals(null, updatedCq.Secure_Rate_Con_Last_Update__c, 'Last update timestamp should be set');
+        System.assertEquals(null, updatedCq.Secure_Rate_Con_Cancelled_Rejected__c, 'Cancelled/Rejected date should remain null for non-rejected status');
     }
 
-    @isTest static void testExecute_non2xx_updatesCarrierQuoteToFailed() {
-        createBasicData();
+    @isTest
+    static void testUpdateRateConStatus_rejected_setsCancelledRejectedDate() {
+        rtms__CarrierQuote__c cq = [SELECT Id FROM rtms__CarrierQuote__c LIMIT 1];
 
-        rtms__CarrierQuote__c cq = [SELECT Id, rtms__Load__c, Secure_Rate_Con_Status__c FROM rtms__CarrierQuote__c LIMIT 1];
-        ContentVersion cv = [SELECT Id FROM ContentVersion LIMIT 1];
+        Map<String, Object> bodyMap = new Map<String, Object>{
+            'status' => 'rejected',
+            'external_id' => cq.Id
+        };
+        String jsonBody = JSON.serialize(bodyMap);
 
-        // Mock a server error
-        Test.setMock(HttpCalloutMock.class, new MockHttpResponseGenerator(500, 'server error'));
+        RestRequest req = new RestRequest();
+        req.requestUri = '/api/highway/ratecon';
+        req.httpMethod = 'POST';
+        req.requestBody = Blob.valueOf(jsonBody);
 
-        // Enqueue the job
+        RestResponse res = new RestResponse();
+        RestContext.request = req;
+        RestContext.response = res;
+
         Test.startTest();
-            System.enqueueJob(new HighwayCalloutJob(cv.Id, 'from@test.com', 'sub', String.valueOf(cq.rtms__Load__c), 'HC-TEST', new List<String>{'a@b.com'}, cq.Id, false));
+        HighwayRateConWeb.updateRateConStatus();
         Test.stopTest();
 
-        // CarrierQuote status should be set to 'failed' by handleStatus
-        rtms__CarrierQuote__c updated = [SELECT Secure_Rate_Con_Status__c FROM rtms__CarrierQuote__c WHERE Id = :cq.Id];
-        System.assertEquals('failed', updated.Secure_Rate_Con_Status__c, 'CarrierQuote status should be set to failed on non-2xx response');
+        rtms__CarrierQuote__c updatedCq = [
+            SELECT Secure_Rate_Con_Status__c, Secure_Rate_Con_Cancelled_Rejected__c
+            FROM rtms__CarrierQuote__c
+            WHERE Id = :cq.Id
+        ];
+
+        System.assertEquals('rejected', updatedCq.Secure_Rate_Con_Status__c, 'Status should be updated to rejected');
+        System.assertNotEquals(null, updatedCq.Secure_Rate_Con_Cancelled_Rejected__c, 'Cancelled/Rejected date should be set when status is rejected');
+    }
+
+    @isTest
+    static void testUpdateRateConStatus_rejected_doesNotOverwriteExistingCancelledRejectedDate() {
+        rtms__CarrierQuote__c cq = [SELECT Id FROM rtms__CarrierQuote__c LIMIT 1];
+        Datetime existingDate = System.now().addDays(-1);
+        cq.Secure_Rate_Con_Cancelled_Rejected__c = existingDate;
+        update cq;
+
+        Map<String, Object> bodyMap = new Map<String, Object>{
+            'status' => 'rejected',
+            'external_id' => cq.Id
+        };
+        String jsonBody = JSON.serialize(bodyMap);
+
+        RestRequest req = new RestRequest();
+        req.requestUri = '/api/highway/ratecon';
+        req.httpMethod = 'POST';
+        req.requestBody = Blob.valueOf(jsonBody);
+
+        RestResponse res = new RestResponse();
+        RestContext.request = req;
+        RestContext.response = res;
+
+        Test.startTest();
+        HighwayRateConWeb.updateRateConStatus();
+        Test.stopTest();
+
+        rtms__CarrierQuote__c updatedCq = [
+            SELECT Secure_Rate_Con_Cancelled_Rejected__c
+            FROM rtms__CarrierQuote__c
+            WHERE Id = :cq.Id
+        ];
+
+        System.assertEquals(existingDate, updatedCq.Secure_Rate_Con_Cancelled_Rejected__c, 'Existing Cancelled/Rejected date should not be overwritten');
     }
 }

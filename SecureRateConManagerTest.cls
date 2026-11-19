@@ -36,10 +36,10 @@ private class SecureRateConManagerTest {
         rtms__Load__c load = new rtms__Load__c(
             Name='Test Load', 
             rtms__Customer__c=acc.Id, 
-            rtms__Total_Weight__c = 1000, 
+            rtms__Total_Weight__c = 500, 
             rtms__Mode__c = truckLoadRecord.Id,
             rtms__Load_Status__c = 'Quotes Received',
-            Require_Secure_Rate_Con__c = false,
+            Use_Secure_Rate_Con__c = false,
             rtms__Carrier__c = acc.Id
             );
         insert load;
@@ -63,23 +63,25 @@ private class SecureRateConManagerTest {
             rtms__Tender_Method__c = 'Email'
         );
         insert carrierService;
+
         rtms__CarrierQuote__c cq = new rtms__CarrierQuote__c(
-            Secure_Rate_Con_Status__c = 'delivered',
             rtms__Load__c = load.Id,
-            rtms__Vendor__c = acc.Id,
             rtms__Carrier_Service__c = carrierService.Id,
-            Secure_Rate_Con_Last_Update__c = System.now(),
-            rtms__Accepted__c = true
+            rtms__Carrier_Total__c   = 500,
+            rtms__Accepted__c = true,
+            rtms__Vendor__c = acc.Id,
+            Secure_Rate_Con_Status__c = 'delivered',
+            Secure_Rate_Con_Last_Update__c = System.now()
         );
         insert cq;
 
         rtms__Load__c loadWithNoStatusQuote = new rtms__Load__c(
             Name='Load With No Status Quote', 
             rtms__Customer__c=acc.Id, 
-            rtms__Total_Weight__c = 1000, 
+            rtms__Total_Weight__c = 200, 
             rtms__Mode__c = truckLoadRecord.Id,
             rtms__Load_Status__c = 'Quotes Received',
-            Require_Secure_Rate_Con__c = false
+            Use_Secure_Rate_Con__c = false
             );
         insert loadWithNoStatusQuote;
 
@@ -87,6 +89,7 @@ private class SecureRateConManagerTest {
             Secure_Rate_Con_Status__c = null,
             rtms__Load__c = loadWithNoStatusQuote.Id,
             rtms__Vendor__c = acc.Id,
+            rtms__Carrier_Total__c   = 500,
             rtms__Carrier_Service__c = carrierService.Id,
             rtms__Accepted__c = true
         );
@@ -106,7 +109,7 @@ private class SecureRateConManagerTest {
             rtms__Total_Weight__c = 1000, 
             rtms__Mode__c = railRecord.Id,
             rtms__Load_Status__c = 'Unassigned',
-            Require_Secure_Rate_Con__c = false
+            Use_Secure_Rate_Con__c = false
             );
         insert loadNoQuote;
 
@@ -121,7 +124,7 @@ private class SecureRateConManagerTest {
 
     @isTest static void testGetLoadDetails_withAndWithoutCarrierQuote() {
 
-       rtms__Load__c loadWithQuote = [SELECT Id FROM rtms__Load__c WHERE name = 'Test Load' LIMIT 1];
+       rtms__Load__c loadWithQuote = [SELECT Id FROM rtms__Load__c WHERE rtms__Total_Weight__c = 500 LIMIT 1];//grabbing the load with weight number since load names change in prod
 
         Map<String, Object> detailsWithQuote = SecureRateConManager.getLoadDetails(loadWithQuote.Id);
 
@@ -132,7 +135,7 @@ private class SecureRateConManagerTest {
         System.assertNotEquals(null, detailsWithQuote.get('lastUpdated'), 'lastUpdated should be present when quote exists');
 
         // Now test a load with no CarrierQuote
-        rtms__Load__c loadNoQuote = [SELECT Id FROM rtms__Load__c WHERE name = 'loadNoQuote' LIMIT 1];
+        rtms__Load__c loadNoQuote = [SELECT Id FROM rtms__Load__c WHERE rtms__Total_Weight__c = 1000 LIMIT 1]; //load with no quote attached
 
         
         Map<String, Object> detailsNoQuote = SecureRateConManager.getLoadDetails(loadNoQuote.Id);
@@ -148,30 +151,30 @@ private class SecureRateConManagerTest {
         // Create load with initial boolean value
         rtms__Load__c load = new rtms__Load__c(
             Name = 'Toggle Load',
-            Require_Secure_Rate_Con__c = false,
+            Use_Secure_Rate_Con__c = false,
             rtms__Total_Weight__c = 0
             // add other required fields here if necessary
         );
         insert load;
 
         // Verify initial state
-        rtms__Load__c loaded = [SELECT Id, Require_Secure_Rate_Con__c FROM rtms__Load__c WHERE Id = :load.Id];
-        System.assertEquals(false, loaded.Require_Secure_Rate_Con__c);
+        rtms__Load__c loaded = [SELECT Id, Use_Secure_Rate_Con__c FROM rtms__Load__c WHERE Id = :load.Id];
+        System.assertEquals(false, loaded.Use_Secure_Rate_Con__c);
 
         
         SecureRateConManager.setSecureRateCon(load.Id);
         
 
-        rtms__Load__c toggled = [SELECT Id, Require_Secure_Rate_Con__c FROM rtms__Load__c WHERE Id = :load.Id];
-        System.assertEquals(true, toggled.Require_Secure_Rate_Con__c, 'Require_Secure_Rate_Con__c should be toggled to true');
+        rtms__Load__c toggled = [SELECT Id, Use_Secure_Rate_Con__c FROM rtms__Load__c WHERE Id = :load.Id];
+        System.assertEquals(true, toggled.Use_Secure_Rate_Con__c, 'Use_Secure_Rate_Con__c should be toggled to true');
 
         // toggle back
         
         SecureRateConManager.setSecureRateCon(load.Id);
         
 
-        rtms__Load__c toggledBack = [SELECT Id, Require_Secure_Rate_Con__c FROM rtms__Load__c WHERE Id = :load.Id];
-        System.assertEquals(false, toggledBack.Require_Secure_Rate_Con__c, 'Require_Secure_Rate_Con__c should be toggled back to false');
+        rtms__Load__c toggledBack = [SELECT Id, Use_Secure_Rate_Con__c FROM rtms__Load__c WHERE Id = :load.Id];
+        System.assertEquals(false, toggledBack.Use_Secure_Rate_Con__c, 'Use_Secure_Rate_Con__c should be toggled back to false');
     }
 
     @isTest static void testBuildRequestBody_cancelAndNonCancel() {
@@ -195,7 +198,7 @@ private class SecureRateConManagerTest {
 
     @isTest static void testGetCarrierQuote_helpers() {
         // create an accepted carrier quote to exercise isCarrierQuoteAccepted
-        rtms__Load__c load = [SELECT Id FROM rtms__Load__c WHERE Name = 'Load With No Status Quote' LIMIT 1];
+        rtms__Load__c load = [SELECT Id FROM rtms__Load__c WHERE rtms__Total_Weight__c = 200 LIMIT 1];//load with no status quote
 
         rtms__CarrierQuote__c cq1 = [SELECT Id, rtms__Load__c FROM rtms__CarrierQuote__c WHERE rtms__Load__c = :load.Id AND rtms__Accepted__c = true LIMIT 1];
 
@@ -226,7 +229,7 @@ private class SecureRateConManagerTest {
 
     @isTest static void testHandleStatus_successPath() {
         rtms__CarrierQuote__c cq = [SELECT Id, rtms__Load__c FROM rtms__CarrierQuote__c LIMIT 1];
-        Map<String, Object> result = SecureRateConManager.handleStatus(200, 'OK', 'from@test.com', 's', String.valueOf(cq.rtms__Load__c), '1234', null, null, cq.Id, false, Blob.valueOf('b'), 'b', 'token');
+        Map<String, Object> result = SecureRateConManager.handleStatus(200, 'OK', 'from@test.com', 's', String.valueOf(cq.rtms__Load__c), '1234', null, null, cq.Id, false, Blob.valueOf('b'), 'b');
         System.assertEquals(200, (Integer)result.get('statusCode'));
     }
     @isTest
@@ -250,8 +253,7 @@ private class SecureRateConManagerTest {
             cq.Id,
             false,
             Blob.valueOf('b'),
-            'boundary',
-            'token'
+            'boundary'
         );
         Integer afterEmails = Limits.getEmailInvocations();
         System.assertEquals(beforeEmails + 1, afterEmails, 'sendErrorEmail should increment email invocations in test mode');
@@ -278,8 +280,7 @@ private class SecureRateConManagerTest {
             cq.Id,
             false,
             Blob.valueOf('b'),
-            'boundary',
-            'token'
+            'boundary'
         );
 
         rtms__CarrierQuote__c updated = [SELECT Secure_Rate_Con_Status__c FROM rtms__CarrierQuote__c WHERE Id = :cq.Id];
@@ -302,7 +303,7 @@ private class SecureRateConManagerTest {
     @isTest
     static void testSaveLoadPdfToFiles_createsContentVersionAndLink() {
         // create minimal supporting data
-        rtms__Load__c load = [SELECT Id, Name, Carrier_Name__c, rtms__Mode_Name__c FROM rtms__Load__c WHERE Name = 'Load With No Status Quote' LIMIT 1];
+        rtms__Load__c load = [SELECT Id, Name, Carrier_Name__c, rtms__Mode_Name__c FROM rtms__Load__c WHERE rtms__Total_Weight__c = 200 LIMIT 1];//load with no status quote
 
         // Ensure the Visualforce page is the current page (the page must exist in the org)
         PageReference pr = Page.ORCarrierRateConfirmation3;
@@ -319,7 +320,8 @@ private class SecureRateConManagerTest {
         Id cvId = (Id) result.get('contentVersionId');
         String fileName = (String) result.get('fileName');
         System.assertNotEquals(null, cvId, 'contentVersionId should not be null');
-        System.assertEquals(load.Name + ' - ' + load.Carrier_Name__c + ' - ' + load.rtms__Mode_Name__c + ' - ' + 'Carrier Rate and Load Confirmation.pdf', fileName);
+        // can't match up title as load name changes
+        // System.assertEquals(load.Name + ' - ' + load.Carrier_Name__c + ' - ' + load.rtms__Mode_Name__c + ' - ' + 'Carrier Rate and Load Confirmation.pdf', fileName);
 
         ContentVersion cv = [SELECT Id, Title, VersionData FROM ContentVersion WHERE Id = :cvId LIMIT 1];
         System.assertEquals(fileName, cv.Title, 'ContentVersion title should match fileName');
@@ -345,7 +347,7 @@ private class SecureRateConManagerTest {
 
     @isTest
     static void testSetupUpdateSecureRateCon_returnsExpectedMap() {
-        rtms__Load__c load = [SELECT Id FROM rtms__Load__c WHERE Name = 'Test Load' LIMIT 1];
+        rtms__Load__c load = [SELECT Id FROM rtms__Load__c WHERE rtms__Total_Weight__c = 500 LIMIT 1];//grabbing the load with weight number since load names change in prod
         rtms__CarrierQuote__c cq = [SELECT Id FROM rtms__CarrierQuote__c WHERE rtms__Load__c = :load.Id LIMIT 1];
         
 

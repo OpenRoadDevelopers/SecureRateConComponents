@@ -3,21 +3,21 @@ public class SecureRateConManager {
     //lwc methods for handling secure rate con
     @AuraEnabled()
     public static Map<String, Object> getLoadDetails(Id loadId){
-        rtms__Load__c load = [SELECT rtms__Mode_Name__c, rtms__Load_Status__c, Require_Secure_Rate_Con__c, rtms__Carrier_Load2__c, rtms__Vendor__c, rtms__Carrier__c, rtms__Carrier_Service__c FROM rtms__Load__c WHERE Id = :loadId];
+        rtms__Load__c load = [SELECT rtms__Mode_Name__c, rtms__Load_Status__c, Use_Secure_Rate_Con__c, rtms__Carrier_Load2__c, rtms__Vendor__c, rtms__Carrier__c, rtms__Carrier_Service__c FROM rtms__Load__c WHERE Id = :loadId];
         rtms__CarrierQuote__c cq = getRecentSecureCarrierQuote(loadId);
         if (cq == null){
-            return new Map<String, Object>{'modeName' => load.rtms__Mode_Name__c, 'loadStatus' => load.rtms__Load_Status__c, 'requireRateCon' => load.Require_Secure_Rate_Con__c, 'carrierLoad' => load.rtms__Carrier_Load2__c, 'vendor' => load.rtms__Vendor__c, 'carrier' => load.rtms__Carrier__c, 'carrierService' => load.rtms__Carrier_Service__c};
+            return new Map<String, Object>{'modeName' => load.rtms__Mode_Name__c, 'loadStatus' => load.rtms__Load_Status__c, 'requireRateCon' => load.Use_Secure_Rate_Con__c, 'carrierLoad' => load.rtms__Carrier_Load2__c, 'vendor' => load.rtms__Vendor__c, 'carrier' => load.rtms__Carrier__c, 'carrierService' => load.rtms__Carrier_Service__c};
         }
         else{
-            return new Map<String, Object>{'modeName' => load.rtms__Mode_Name__c, 'loadStatus' => load.rtms__Load_Status__c, 'requireRateCon' => load.Require_Secure_Rate_Con__c, 'carrierLoad' => load.rtms__Carrier_Load2__c, 'vendor' => load.rtms__Vendor__c, 'carrier' => load.rtms__Carrier__c, 'carrierService' => load.rtms__Carrier_Service__c, 'quoteStatus' => cq.Secure_Rate_Con_Status__c, 'lastUpdated' => cq.Secure_Rate_Con_Last_Update__c};    
+            return new Map<String, Object>{'modeName' => load.rtms__Mode_Name__c, 'loadStatus' => load.rtms__Load_Status__c, 'requireRateCon' => load.Use_Secure_Rate_Con__c, 'carrierLoad' => load.rtms__Carrier_Load2__c, 'vendor' => load.rtms__Vendor__c, 'carrier' => load.rtms__Carrier__c, 'carrierService' => load.rtms__Carrier_Service__c, 'quoteStatus' => cq.Secure_Rate_Con_Status__c, 'lastUpdated' => cq.Secure_Rate_Con_Last_Update__c};    
         }
     }
     
     @AuraEnabled()
     public static void setSecureRateCon(Id loadId){
         try {
-            rtms__Load__c load = [SELECT Require_Secure_Rate_Con__c FROM rtms__Load__c WHERE Id = :loadId];
-            load.Require_Secure_Rate_Con__c = !load.Require_Secure_Rate_Con__c;
+            rtms__Load__c load = [SELECT Use_Secure_Rate_Con__c FROM rtms__Load__c WHERE Id = :loadId];
+            load.Use_Secure_Rate_Con__c = !load.Use_Secure_Rate_Con__c;
             update load;
         } catch (DmlException de) {
             throw new AuraHandledException(de.getMessage());
@@ -32,7 +32,7 @@ public class SecureRateConManager {
         rtms__Load__c load = [SELECT rtms__Carrier__r.rtms__Transportation_Profile__r.Highway_Carrier_ID__c  FROM rtms__Load__c WHERE Id = :loadId LIMIT 1];
         String highwayCarrierId = load.rtms__Carrier__r.rtms__Transportation_Profile__r.Highway_Carrier_ID__c;
         Map<String, Object> contentVersionMap = saveLoadPdfToFiles(loadId);
-        String subject = contentVersionMap.get('fileName') != null ? 'Updated: ' + (String)contentVersionMap.get('fileName') : 'Updated: Carrier Rate and Load Confirmation';
+        String subject =  'Updated: ' + (String)contentVersionMap.get('fileName');
         Id contentVersionId = (Id)contentVersionMap.get('contentVersionId');
         Id carrierQuoteId = isCarrierQuoteAccepted(loadId).Id;
         Boolean isCancel = false;
@@ -51,23 +51,21 @@ public class SecureRateConManager {
     public static Map<String, Object> updateSecureRateConRequest(String fromWho, String subject, String loadId, String highwayCarrierId, List<String> recipients, Id contentVersionId, Id carrierQuoteId, Boolean isCancel) {
         String boundary = '----' + String.valueOf(Math.abs(Crypto.getRandomInteger()));
         Blob bodyBlob = buildRequestBody(fromWho, subject, loadId, highwayCarrierId, recipients, contentVersionId, carrierQuoteId, boundary, isCancel);
-        API_key__mdt ApiKey = [SELECT Api_Credential__c FROM API_key__mdt WHERE DeveloperName = 'HighwayStagingAPIKey' LIMIT 1];
-        String bearerToken = ApiKey.Api_Credential__c;
 
         List<String> notify = new List<String>{ 'IT@openroad.inc' };
         Http http = new Http();
         try {
-            HttpResponse res = SecureRateConManager.sendRequest(bodyBlob, boundary, bearerToken);
+            HttpResponse res = SecureRateConManager.sendRequest(bodyBlob, boundary);
             Integer status = res.getStatusCode();
-            return handleStatus(status, res.getBody(), fromWho, subject, loadId, highwayCarrierId, recipients, contentVersionId, carrierQuoteId, isCancel, bodyBlob, boundary, bearerToken);
+            return handleStatus(status, res.getBody(), fromWho, subject, loadId, highwayCarrierId, recipients, contentVersionId, carrierQuoteId, isCancel, bodyBlob, boundary);
         } catch (Exception e) {
             handleCalloutError(e, loadId, carrierQuoteId, contentVersionId, fromWho);
-            return null;
+            return new Map<String, Object>{'statusCode' => 'ERROR'};
         }
     }
 
     
-    public static Map<String, Object> handleStatus(Integer statusCode, String respBody, String fromWho, String subject, String loadId, String highwayCarrierId, List<String> recipients, Id contentVersionId, Id carrierQuoteId, Boolean isCancel, Blob bodyBlob, String boundary, String bearerToken) {
+    public static Map<String, Object> handleStatus(Integer statusCode, String respBody, String fromWho, String subject, String loadId, String highwayCarrierId, List<String> recipients, Id contentVersionId, Id carrierQuoteId, Boolean isCancel, Blob bodyBlob, String boundary) {
         if(statusCode == 422 && respBody.contains('Undelivered - user doesn\'t exist')) {
             String body = 'Highway callout failed with status 422.<br>Endpoint: ' + 'https://staging.highway.com/core/connect/external_api/v1/rate_confirmations'
                 + '<br>StatusCode: ' + statusCode
@@ -78,9 +76,9 @@ public class SecureRateConManager {
                 + '<br>From Who: ' + fromWho
                 + '<br>Salesforce/Revenova user name: ' + UserInfo.getName()
                 + '<br>Salesforce/Revenova useremail address: ' + UserInfo.getUserEmail();
-            bodyBlob = SecureRateConManager.buildRequestBody('jeffm@openroad.inc', subject, loadId, highwayCarrierId, recipients, contentVersionId, carrierQuoteId, boundary, isCancel);//TODO figure out who to send from
-            
-            HttpResponse res = SecureRateConManager.sendRequest(bodyBlob, boundary, bearerToken);
+            //NOTE: IT@openroad.inc is not a valid user in staging.highway use Takunp@openroad.inc or jeffm@openroad.inc for sandbox testing
+            bodyBlob = SecureRateConManager.buildRequestBody('IT@openroad.inc', subject, loadId, highwayCarrierId, recipients, contentVersionId, carrierQuoteId, boundary, isCancel);
+            HttpResponse res = SecureRateConManager.sendRequest(bodyBlob, boundary);
             respBody = res.getBody();
             statusCode = res.getStatusCode();
             //send special email to notify IT to add the user to highway
@@ -98,7 +96,7 @@ public class SecureRateConManager {
             sendErrorEmail(new List<String>{ 'IT@openroad.inc'}, 'HighwayCalloutJob failed with status 422', newHtml, true);
         }
         if(statusCode < 200 || statusCode >= 300){
-            String body = 'Highway callout failed.<br>Endpoint: ' +'https://staging.highway.com/core/connect/external_api/v1/rate_confirmations'
+            String body = 'Highway callout failed.'
                 + '<br>StatusCode: ' + statusCode 
                 + '<br>Response: ' + respBody
                 + '<br>LoadId: ' + loadId 
@@ -126,10 +124,10 @@ public class SecureRateConManager {
     public static void handleCalloutError(Exception e, String loadId, String carrierQuoteId, Id contentVersionId, String fromWho) {
         String body = 'Highway callout exception: ' + e.getMessage()
                 + '<br>Stack: ' + e.getStackTraceString()
-                + '<br>Endpoint: ' + 'https://staging.highway.com/core/connect/external_api/v1/rate_confirmations'
                 + '<br>LoadId: ' + loadId
                 + '<br>CarrierQuoteId: ' + carrierQuoteId
                 + '<br>ContentVersionId: ' + contentVersionId
+            	+ '<br>From Who: ' + fromWho
                 + '<br>Salesforce/Revenova user name: ' + UserInfo.getName()
                 + '<br>Salesforce/Revenova useremail address: ' + UserInfo.getUserEmail();
         String renderedHtml;
@@ -146,10 +144,12 @@ public class SecureRateConManager {
         sendErrorEmail(new List<String>{ 'IT@openroad.inc', fromWho}, 'Failed to send Highway Secure Rate Con', newHtml, true);
         setSecureRateConStatus(carrierQuoteId, 'failed');
     }
-	@TestVisible
-    private static void setSecureRateConStatus(Id carrierQuoteId, String status) {
-        rtms__CarrierQuote__c cq = [SELECT Secure_Rate_Con_Status__c FROM rtms__CarrierQuote__c WHERE Id =: carrierQuoteId];
+	
+    public static void setSecureRateConStatus(Id carrierQuoteId, String status) {
+        rtms__CarrierQuote__c cq = [SELECT Secure_Rate_Con_Status__c, Secure_Rate_Con_Last_Update__c FROM rtms__CarrierQuote__c WHERE Id =: carrierQuoteId];
         cq.Secure_Rate_Con_Status__c = status;
+        cq.Secure_Rate_Con_Last_Update__c = System.now();
+        
         update cq;
     }
 
@@ -175,7 +175,7 @@ public class SecureRateConManager {
     }
 
     private static rtms__CarrierQuote__c isCarrierQuoteAccepted(Id loadId) {
-        List<rtms__CarrierQuote__c> cqs = [SELECT Id, rtms__Accepted__c, Secure_Rate_Con_Status__c, Secure_Rate_Con_Cancelled_Rejected__c FROM rtms__CarrierQuote__c WHERE rtms__Load__c = :loadId AND rtms__Accepted__c = true];
+        List<rtms__CarrierQuote__c> cqs = [SELECT Id, rtms__Accepted__c, Secure_Rate_Con_Status__c, Secure_Rate_Con_Cancelled_Rejected__c FROM rtms__CarrierQuote__c WHERE rtms__Load__c = :loadId AND rtms__Accepted__c = true AND CS_Service_Type__c = 'Carrier' LIMIT 2];
         if(!cqs.isEmpty()){
             if(cqs.size() == 1){
                 return cqs[0];
@@ -235,9 +235,7 @@ public class SecureRateConManager {
             '--' + boundary + crlf +
             'Content-Disposition: form-data; name="rate_confirmation[external_load_id]"' + crlf + crlf + loadId + crlf +
             '--' + boundary + crlf +
-            'Content-Disposition: form-data; name="rate_confirmation[subject]"' + crlf + crlf + 'Takun test' + crlf +
-            '--' + boundary + crlf + 
-            'Content-Disposition: form-data; name="rate_confirmation[targeted_emails]"' + crlf + crlf + 'dot01006144@rates.staging.highway.com' + crlf;
+            'Content-Disposition: form-data; name="rate_confirmation[subject]"' + crlf + crlf + subject + crlf;
         
         Blob headerBlob = Blob.valueOf(textParts);
 
@@ -288,15 +286,14 @@ public class SecureRateConManager {
     
     
 
-    public static HttpResponse sendRequest(Blob bodyBlob, String boundary, String bearerToken) {
+    public static HttpResponse sendRequest(Blob bodyBlob, String boundary) {
         HttpRequest req = new HttpRequest();
-        req.setEndpoint('https://staging.highway.com/core/connect/external_api/v1/rate_confirmations');
+        req.setEndpoint('callout:Highway_Secure_Rate_Con_Call_Out/core/connect/external_api/v1/rate_confirmations');
         req.setMethod('POST');
         req.setHeader('Content-Type', 'multipart/form-data; boundary=' + boundary);
-        req.setHeader('Authorization', 'Bearer ' + bearerToken);
         req.setHeader('Accept', 'application/json');
         req.setBodyAsBlob(bodyBlob);
-
+        req.setTimeout(25000); // Set timeout to 25 seconds
         Http http = new Http();
         return http.send(req);
     }
